@@ -8,4 +8,6 @@ current features:
 
 
 *timesync_enabled - if true, the server time will be synced to real UTC time
-**timesync_offset - time offset - set this to your timezone of choice in hours (e.g. +2 for CEST, +1 for CET and so on)
+**timesync_offset - time offset - set this to your timezone of choice in hours (e.g. +2 for CEST, -5 for EST and so on)
+
+Note: timesync_offset does NOT adjust for daylight savings time!
