@@ -3,6 +3,8 @@ simple server utils
 current features:
 - /modlist (/ml) command - lists mods on the server
 - 2 gamerules - "ssu:timesync_enabled"* and "ssu:timesync_offset"**
+- /thor <target> - strikes the selected entity by thor
+- text formatting - using &<colorcode> you can format text in color
 - more to come
 
 
