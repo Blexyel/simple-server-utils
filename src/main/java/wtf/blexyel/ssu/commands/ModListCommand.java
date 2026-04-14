@@ -24,9 +24,7 @@ public class ModListCommand {
       mods.append(metadata.getName()).append(", ");
     }
     String modsFixed =
-        mods.toString().endsWith(", ")
-            ? mods.substring(0, mods.length() - 2)
-            : mods.toString();
+        mods.toString().endsWith(", ") ? mods.substring(0, mods.length() - 2) : mods.toString();
     context.getSource().sendSuccess(() -> Component.literal("§a[mods]: §r" + modsFixed), false);
     return 1;
   }

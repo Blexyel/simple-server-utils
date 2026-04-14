@@ -22,14 +22,22 @@ public class ThorCommand {
       CompoundTag tag = new CompoundTag();
       tag.putString("id", "minecraft:lightning_bolt");
 
-      Entity entity = EntityType.loadEntityRecursive(tag, level, EntitySpawnReason.COMMAND, (e) -> {
-        e.setPos(targetpos.x, targetpos.y, targetpos.z);
-        return e;
-      });
-      if (entity != null)
-        level.addFreshEntity(entity);
+      Entity entity =
+          EntityType.loadEntityRecursive(
+              tag,
+              level,
+              EntitySpawnReason.COMMAND,
+              (e) -> {
+                e.setPos(targetpos.x, targetpos.y, targetpos.z);
+                return e;
+              });
+      if (entity != null) level.addFreshEntity(entity);
 
-      context.getSource().sendSuccess(() -> Component.literal(target.getName().getString() + " has been struck by Thor"), false);
+      context
+          .getSource()
+          .sendSuccess(
+              () -> Component.literal(target.getName().getString() + " has been struck by Thor"),
+              false);
       return 1;
     } catch (CommandSyntaxException e) {
       context.getSource().sendFailure(Component.literal("You must specify a target!"));

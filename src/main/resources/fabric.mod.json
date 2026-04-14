@@ -16,6 +16,9 @@
       "wtf.blexyel.ssu.SimpleServerUtils"
     ]
   },
+  "mixins": [
+    "ssu.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=${loader_version}",
     "minecraft": ">=26.1",

@@ -1,19 +1,22 @@
 package wtf.blexyel.ssu;
 
-import com.mojang.brigadier.arguments.ArgumentType;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Optional;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.gamerule.v1.GameRuleBuilder;
 import net.fabricmc.fabric.api.message.v1.ServerMessageDecoratorEvent;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
 import net.minecraft.world.clock.ServerClockManager;
 import net.minecraft.world.clock.WorldClock;
@@ -26,6 +29,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wtf.blexyel.ssu.commands.ModListCommand;
 import wtf.blexyel.ssu.commands.ThorCommand;
+import wtf.blexyel.ssu.commands.TpsCommand;
+import wtf.blexyel.ssu.misc.TpsStuff;
+import wtf.blexyel.ssu.network.SSUPayload;
+import wtf.blexyel.ssu.network.TpsPayload;
 
 public class SimpleServerUtils implements ModInitializer {
   public static final String MOD_ID = "ssu";
@@ -43,21 +50,27 @@ public class SimpleServerUtils implements ModInitializer {
           .category(GameRuleCategory.MISC)
           .buildAndRegister(
               Identifier.fromNamespaceAndPath(SimpleServerUtils.MOD_ID, "timesync_offset"));
+
   // ### Game Rules ### //
   @Override
   public void onInitialize() {
     // ### Message Decoration ### //
-    ServerMessageDecoratorEvent.EVENT.register(ServerMessageDecoratorEvent.STYLING_PHASE, (sender, message) -> {
-      if (sender != null && !message.getString().isEmpty()) {
-        if (!sender.permissions().hasPermission(Permissions.COMMANDS_MODERATOR)) {
-          sender.sendSystemMessage(Component.literal("You do not have permission to use Text Formatting!").withColor(0xFF5555));
-          return Component.literal(message.getString().replaceAll("&([0-9a-fk-or])", ""));
-        }
-        return Component.literal(message.copy().getString().replaceAll("&([0-9a-fk-or])", "§$1"));
-      }
+    ServerMessageDecoratorEvent.EVENT.register(
+        ServerMessageDecoratorEvent.STYLING_PHASE,
+        (sender, message) -> {
+          if (sender != null && !message.getString().isEmpty()) {
+            if (!sender.permissions().hasPermission(Permissions.COMMANDS_MODERATOR)) {
+              sender.sendSystemMessage(
+                  Component.literal("You do not have permission to use Text Formatting!")
+                      .withColor(0xFF5555));
+              return Component.literal(message.getString().replaceAll("&([0-9a-fk-or])", ""));
+            }
+            return Component.literal(
+                message.copy().getString().replaceAll("&([0-9a-fk-or])", "§$1"));
+          }
 
-      return message;
-    });
+          return message;
+        });
     // ### Message Decoration ### //
     // ### Command Registration ### //
     CommandRegistrationCallback.EVENT.register(
@@ -74,17 +87,27 @@ public class SimpleServerUtils implements ModInitializer {
                   .executes(ModListCommand::command));
           dispatcher.register(
               Commands.literal("thor")
-                  .then(Commands.argument("target", EntityArgument.entity()).executes(ThorCommand::command)
+                  .then(
+                      Commands.argument("target", EntityArgument.entity())
+                          .executes(ThorCommand::command)
+                          .requires(
+                              source ->
+                                  source
+                                      .permissions()
+                                      .hasPermission(Permissions.COMMANDS_MODERATOR))));
+          dispatcher.register(
+              Commands.literal("tps")
                   .requires(
-                      source -> source.permissions().hasPermission(Permissions.COMMANDS_MODERATOR))));
+                      source -> source.permissions().hasPermission(Permissions.COMMANDS_MODERATOR))
+                  .executes(TpsCommand::command));
         });
     // ### Command Registration ### //
 
     // ### Time Syncing ### //
-    var ref = new Object() {
-      ZonedDateTime now =
-          ZonedDateTime.now(ZoneId.of("UTC"));
-    };
+    var ref =
+        new Object() {
+          ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
+        };
     ServerTickEvents.END_LEVEL_TICK.register(
         level -> {
           GameRules gamerules = level.getGameRules();
@@ -98,20 +121,36 @@ public class SimpleServerUtils implements ModInitializer {
             Optional<Holder<@NotNull WorldClock>> clock = dimensionType.value().defaultClock();
             ServerClockManager clockmanager = level.clockManager();
             if (clock.isEmpty()) return;
-            ref.now = ref.now
-                    .plusHours(
-                            Math.clamp(
-                                level.getGameRules().get(SimpleServerUtils.TIMESYNC_OFFSET),
-                                -12,
-                                12));
-            int totalSeconds = ((ref.now.getHour() * 60) + ref.now.getMinute()) * 60 + ref.now.getSecond();
+            ref.now =
+                ref.now.plusHours(
+                    Math.clamp(
+                        level.getGameRules().get(SimpleServerUtils.TIMESYNC_OFFSET), -12, 12));
+            int totalSeconds =
+                ((ref.now.getHour() * 60) + ref.now.getMinute()) * 60 + ref.now.getSecond();
             int ticks = (((totalSeconds * 24000) / 86400) + 18000) % 24000;
             long time = clockmanager.getTotalTicks(clock.get());
             long dayCounter = (long) (Math.floor((double) time / 24000)) * 24000;
             clockmanager.setTotalTicks(clock.get(), dayCounter + ticks);
           }
-        }
-        // ### Time Syncing ### //
-        );
+        });
+    // ### Time Syncing ### //
+    // ### Networking ### //
+    PayloadTypeRegistry.clientboundPlay().register(TpsPayload.TYPE, TpsPayload.CODEC);
+    PayloadTypeRegistry.clientboundPlay().register(SSUPayload.TYPE, SSUPayload.CODEC);
+    ServerTickEvents.END_SERVER_TICK.register(
+        server -> {
+          TpsPayload payload = new TpsPayload(TpsStuff.TPS(server));
+
+          for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            ServerPlayNetworking.send(player, payload);
+          }
+        });
+    ServerPlayerEvents.JOIN.register(
+        serverPlayer -> {
+          SSUPayload payload = new SSUPayload(true);
+
+          ServerPlayNetworking.send(serverPlayer, payload);
+        });
+    // ### Networking ### //
   }
 }
