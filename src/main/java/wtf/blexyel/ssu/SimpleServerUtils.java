@@ -1,6 +1,8 @@
 package wtf.blexyel.ssu;
 
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Optional;
 import net.fabricmc.api.ModInitializer;
@@ -104,10 +106,6 @@ public class SimpleServerUtils implements ModInitializer {
     // ### Command Registration ### //
 
     // ### Time Syncing ### //
-    var ref =
-        new Object() {
-          ZonedDateTime now = ZonedDateTime.now(ZoneId.of("UTC"));
-        };
     ServerTickEvents.END_LEVEL_TICK.register(
         level -> {
           GameRules gamerules = level.getGameRules();
@@ -121,12 +119,11 @@ public class SimpleServerUtils implements ModInitializer {
             Optional<Holder<@NotNull WorldClock>> clock = dimensionType.value().defaultClock();
             ServerClockManager clockmanager = level.clockManager();
             if (clock.isEmpty()) return;
-            ref.now =
-                ref.now.plusHours(
-                    Math.clamp(
-                        level.getGameRules().get(SimpleServerUtils.TIMESYNC_OFFSET), -12, 12));
+            int offset = Math.clamp(level.getGameRules().get(SimpleServerUtils.TIMESYNC_OFFSET), -12, 12);
+            ZoneOffset zonedOffset = ZoneOffset.ofHours(offset);
+            OffsetDateTime now = OffsetDateTime.now(zonedOffset);
             int totalSeconds =
-                ((ref.now.getHour() * 60) + ref.now.getMinute()) * 60 + ref.now.getSecond();
+                ((now.getHour() * 60) + now.getMinute()) * 60 + now.getSecond();
             int ticks = (((totalSeconds * 24000) / 86400) + 18000) % 24000;
             long time = clockmanager.getTotalTicks(clock.get());
             long dayCounter = (long) (Math.floor((double) time / 24000)) * 24000;
